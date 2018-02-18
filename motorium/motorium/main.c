@@ -43,9 +43,7 @@
 #define MYUBRR (FOSC/16/BAUD -1)
 
 int16_t getHeadingInt(void);
-
 int16_t getPulseComparitorForDistance(int distanceInDecimeters);
-
 void startUpIndicator(void);
 
 // SPI communications
@@ -129,7 +127,7 @@ int main(void)
 	TCCR0B |= (1 << CS02);
 	TIMSK0 |= (1 << OCIE0A);    //Set the ISR COMPA vect
 	TCCR0B |= (0 << CS01) | (0 << CS00);  // sets prescaler to 64 and stops the timer
-	// NOTE: Timer0 NOT currently needed (was used for attempt #1 of event driven driving)
+	// NOTE: Timer0 NOT currently needed 
 	
 	#if MAGN_DOCALIBRATION  == 1
 	// magncal_docalibrationclient(uart_putc, uart_getc);
@@ -140,48 +138,10 @@ int main(void)
 	uart_puts("System ready.");
 	TX_NEWLINE;
 	send_string_SPI("System ready.\n");
-	
-	////test drive - simple approach #1
-	//LED_PORT |= DEBUG_PIN_MASK;
-	//pulseCount = 0;
-	//forward();
-	//_delay_ms(5300); //TODO: Tese all need to now be timers - now that we've got interrupts
-	//
-	//char pulseStr[5];
-	//
-	//dec_to_str(pulseStr,pulseCount, 4);
-	//pulseStr[4] = '\n';
-	//send_string_SPI(pulseStr);
-	//uart_puts(pulseStr);
-	//
-	//allStop();
-	//_delay_ms(1000);
-	//
-	//pulseCount = 0;
-	//reverse();
-	//_delay_ms(5300);	//TODO: Tese all need to now be timers - now that we've got interrupts
-	//
-	//dec_to_str(pulseStr,pulseCount, 4);
-	//pulseStr[4] = '\n';
-	//send_string_SPI(pulseStr);
-	//uart_puts(pulseStr);
-	
-	//allStop();
-	
-	//turnRightTo(90);
-	
-	//command = FORWARD;
-	//commandDurationMs = 5300;
-	//durationIdx = 0;
-	//_commandTest = FORWARD;
-	//pulseCount = 0;
-	
-	//TCCR0B |= (1 << CS01) | (1 << CS00);  // set prescaler to 64 and start the timer
-	//sei();
-	
+		
 	while (1)
 	{
-		// read of compass testing ---
+		// read of compass for diagnostics
 		hmc5883l_getrawdata(&mxraw, &myraw, &mzraw);
 		hmc5883l_getdata(&mx, &my, &mz);
 		
@@ -211,108 +171,8 @@ int main(void)
 		char distStr[5];
 		dec_to_str(distStr,headingInt, 3);
 		distStr[3] = '\n';
-		send_string_SPI(distStr);
-		
+		send_string_SPI(distStr);		
 		_delay_ms(500);
-		// end read of compass testing ---
-		
-		// -- first attempt at 'event' driven command testing (failure)
-		//if(command > 0)
-		//{
-		//if(command == FORWARD) {
-		//if(durationIdx == 0)
-		//{
-		//uart_puts("motors forward");
-		//TX_NEWLINE;
-		//send_string_SPI("motors forward\n");
-		//forward();
-		//TCCR0B |= (1 << CS01) | (1 << CS00);  // set prescaler to 64 and start the timer
-		//sei();
-		//}
-		//
-		//// have we driven forward enough?
-		//if(durationIdx >= commandDurationMs) {
-		//cli();
-		////yep.
-		//command = STOP;
-		//// time limit the stahp
-		//commandDurationMs = 500;
-		//durationIdx = 0;
-		//
-		//// debuggery
-		//char pulseStr[5];
-		//dec_to_str(pulseStr,pulseCount, 4);
-		//pulseStr[4] = '\n';
-		//send_string_SPI(pulseStr);
-		//uart_puts(pulseStr);
-		//sei();
-		//
-		//}
-		//}
-		//
-		//if(command == REVERSE) {
-		//if(durationIdx == 0)
-		//{
-		//uart_puts("motors reverse");
-		//TX_NEWLINE;
-		//send_string_SPI("motors reverse\n");
-		//reverse();
-		//TCCR0B |= (1 << CS01) | (1 << CS00);  // set prescaler to 64 and start the timer
-		//sei();
-		//}
-		//// have we driven in reverse enough?
-		//if(durationIdx >= commandDurationMs) {
-		//cli();
-		////yep.
-		//command = STOP;
-		//// time limit the stahp
-		//commandDurationMs = 500;
-		//durationIdx = 0;
-		//
-		//// debuggery
-		//char pulseStr[5];
-		//dec_to_str(pulseStr,pulseCount, 4);
-		//pulseStr[4] = '\n';
-		//send_string_SPI(pulseStr);
-		//uart_puts(pulseStr);
-		//sei();
-		//}
-		//}
-		//
-		//if(command == STOP) {
-		//
-		//if(durationIdx == 0)
-		//{
-		//uart_puts("motors stopped");
-		//TX_NEWLINE;
-		//send_string_SPI("motors stopped\n");
-		//}
-		//
-		//allStop();
-		//
-		//if(durationIdx >= commandDurationMs) {
-		//
-		////stahped long enough
-		//
-		////for now - choose what next
-		//if(_commandTest == FORWARD){
-		//cli();
-		//_commandTest = REVERSE;
-		//command = REVERSE;
-		//commandDurationMs = 5300;
-		//durationIdx = 0;
-		//pulseCount = 0;
-		//sei();
-		//} else {
-		////we're done
-		//TCCR0B |= (0 << CS01) | (0 << CS00);  //STOP the timer
-		//}
-		//}
-		//
-		//}
-		//
-		//}
-		// -- first attempt at 'event' driven command testing (failure)
 		
 		if(pulseCountComparitor > 0)
 		{
@@ -323,8 +183,7 @@ int main(void)
 				char pulseStr[16];
 				dec_to_str(pulseStr,pulseCount, 12);
 				uart_puts(pulseStr);
-				TX_NEWLINE;
-				
+				TX_NEWLINE;				
 				
 				TX_NEWLINE;
 				allStop();
@@ -449,8 +308,7 @@ int main(void)
 }
 
 void startUpIndicator(void) {
-	//PORTD &= ~(1 << n); // Pin n goes low
-	//PORTD |= (1 << n); // Pin n goes high
+
 	LED_PORT |= ACTIVE_LED_MASK;
 	_delay_ms(1000);
 	LED_PORT &= ~ACTIVE_LED_MASK;
@@ -510,7 +368,7 @@ void uart_init(void){
 
 	uartBufferIdx = 0;
 	memset(uartBuffer, 0, sizeof(uartBuffer));
-	//sei();                                      // Lets not forget to enable interrupts =P
+	//sei();                                      // interrups are enabled up in main loop
 }
 
 void uart_putc(unsigned char data)
@@ -560,8 +418,7 @@ int16_t getHeadingInt() {
 	heading += declination;
 	//check 360degree heading
 	if(heading < 0)
-	heading = 360 + heading;
-	
+	heading = 360 + heading;	
 	return (int16_t)heading;
 }
 
