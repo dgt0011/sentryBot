@@ -76,13 +76,25 @@ uint8_t _commandTest;
 
 int main(void)
 {
+	char lcdClear[4];
+	lcdClear[0] = '~';
+	lcdClear[1] = 'C';
+	lcdClear[2] = '\n';
+	
+	char lcdHome[5];
+	lcdHome[0] = '~';
+	lcdHome[1] = 'G';
+	lcdHome[2] = 0x00;
+	lcdHome[2] = 0x00;
+	lcdHome[3] = '\n';
+	
 	int16_t mxraw = 0;
 	int16_t myraw = 0;
 	int16_t mzraw = 0;
 	double mx = 0;
 	double my = 0;
 	double mz = 0;
-	char itmp[10];	
+	char itmp[10];
 	
 	pulseCountComparitor = 0;
 	pulseCount = 0;
@@ -97,17 +109,28 @@ int main(void)
 	
 	uart_puts("Comms online.");
 	TX_NEWLINE;
+		send_string_SPI(lcdClear);
+		send_string_SPI(lcdHome);
 	send_string_SPI("Comms online.\n");
+	_delay_ms(1000);
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
 	
 	uart_puts("Initialising sensors ...");
 	TX_NEWLINE;
-	send_string_SPI("Initialising sensors ..\n");
+	send_string_SPI("Init sensors ..\n");
+	_delay_ms(1000);
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
 	
 	hmc5883l_init();
 	
 	uart_puts("Initialising drives ..");
 	TX_NEWLINE;
-	send_string_SPI("Initialising drives ..\n");
+	send_string_SPI("Init drives ..\n");
+	_delay_ms(1000);
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
 	
 	drive_init();
 	
@@ -127,7 +150,7 @@ int main(void)
 	TCCR0B |= (1 << CS02);
 	TIMSK0 |= (1 << OCIE0A);    //Set the ISR COMPA vect
 	TCCR0B |= (0 << CS01) | (0 << CS00);  // sets prescaler to 64 and stops the timer
-	// NOTE: Timer0 NOT currently needed 
+	// NOTE: Timer0 NOT currently needed
 	
 	#if MAGN_DOCALIBRATION  == 1
 	// magncal_docalibrationclient(uart_putc, uart_getc);
@@ -137,8 +160,17 @@ int main(void)
 	
 	uart_puts("System ready.");
 	TX_NEWLINE;
+	
+	char lcdPosition[5];
+	lcdPosition[0] = '~';
+	lcdPosition[1] = 'G';
+	lcdPosition[2] = 0x03;
+	lcdPosition[3] = 0x01;
+	lcdPosition[4] = '\n';
+	send_string_SPI(lcdPosition);	
 	send_string_SPI("System ready.\n");
-		
+	_delay_ms(2000);
+	
 	while (1)
 	{
 		// read of compass for diagnostics
@@ -171,8 +203,10 @@ int main(void)
 		char distStr[5];
 		dec_to_str(distStr,headingInt, 3);
 		distStr[3] = '\n';
-		send_string_SPI(distStr);		
+		send_string_SPI(distStr);
 		_delay_ms(500);
+		send_string_SPI(lcdClear);
+		send_string_SPI(lcdHome);
 		
 		if(pulseCountComparitor > 0)
 		{
@@ -183,7 +217,7 @@ int main(void)
 				char pulseStr[16];
 				dec_to_str(pulseStr,pulseCount, 12);
 				uart_puts(pulseStr);
-				TX_NEWLINE;				
+				TX_NEWLINE;
 				
 				TX_NEWLINE;
 				allStop();
@@ -246,7 +280,7 @@ int main(void)
 					handled = 1;
 					if(val == 0){
 						pulseCountComparitor = SINGLE_REVOLUTION_FWD;
-					} else {
+						} else {
 						pulseCountComparitor = getPulseComparitorForDistance(val);
 					}
 					pulseCount = 0;
@@ -260,8 +294,8 @@ int main(void)
 						pulseCountComparitor = SINGLE_REVOLUTION_REV;
 						} else {
 						pulseCountComparitor = getPulseComparitorForDistance(val);
-					}					
-										
+					}
+					
 					pulseCountComparitor = SINGLE_REVOLUTION_REV;
 					pulseCount = 0;
 					reverse();
@@ -418,17 +452,33 @@ int16_t getHeadingInt() {
 	heading += declination;
 	//check 360degree heading
 	if(heading < 0)
-	heading = 360 + heading;	
+	heading = 360 + heading;
 	return (int16_t)heading;
 }
 
 void allStop(void) {
+	
+	char lcdClear[4];
+	lcdClear[0] = '~';
+	lcdClear[1] = 'C';
+	lcdClear[2] = '\n';
+	
+	char lcdHome[5];
+	lcdHome[0] = '~';
+	lcdHome[1] = 'G';
+	lcdHome[2] = 0x00;
+	lcdHome[2] = 0x00;
+	lcdHome[3] = '\n';
+	
 	LED_PORT &= ~PORT_LED_MASK;
 	LED_PORT &= ~STARBOARD_LED_MASK;
 	
 	uart_puts("motors stop");
 	TX_NEWLINE;
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
 	send_string_SPI("motors stop\n");
+	
 	
 	OCR1AH=0x0B;
 	OCR1AL=0xB8;
@@ -437,10 +487,24 @@ void allStop(void) {
 }
 
 void forward() {
+	char lcdClear[4];
+	lcdClear[0] = '~';
+	lcdClear[1] = 'C';
+	lcdClear[2] = '\n';
+	
+	char lcdHome[5];
+	lcdHome[0] = '~';
+	lcdHome[1] = 'G';
+	lcdHome[2] = 0x00;
+	lcdHome[2] = 0x00;
+	lcdHome[3] = '\n';
+	
 	LED_PORT  |= PORT_LED_MASK | STARBOARD_LED_MASK;
 	
 	uart_puts("motors forward");
 	TX_NEWLINE;
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
 	send_string_SPI("motors forward\n");
 	
 	//drive forward (both wheels)
@@ -454,6 +518,17 @@ void forward() {
 }
 
 void reverse(void){
+	char lcdClear[4];
+	lcdClear[0] = '~';
+	lcdClear[1] = 'C';
+	lcdClear[2] = '\n';
+	
+	char lcdHome[5];
+	lcdHome[0] = '~';
+	lcdHome[1] = 'G';
+	lcdHome[2] = 0x00;
+	lcdHome[2] = 0x00;
+	lcdHome[3] = '\n';
 	//drive backward (both wheels)
 	// aim is OCR1 to be between 1.0 and 1.5ms for backward.
 	// stopped OCR1 above is 3ms (3000) (half this for fast pwm versus corrected pwm??
@@ -461,6 +536,8 @@ void reverse(void){
 	
 	uart_puts("motors reverse");
 	TX_NEWLINE;
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
 	send_string_SPI("motors reverse\n");
 	
 	OCR1AH=0x0E;
@@ -493,11 +570,11 @@ void turnRightBy(int16_t degrees){
 	
 	uart_puts("	-> turnRightBy");
 	TX_NEWLINE;
-		
+	
 	//rudimentary average sampling
 	int16_t sample1 = getHeadingInt();
 	int16_t sample2 = getHeadingInt();
-	int16_t sample3 = getHeadingInt();	
+	int16_t sample3 = getHeadingInt();
 	int16_t headingVal = (sample1 + sample2 + sample3)/3;
 	
 	dec_to_str(heading,headingVal, 3);
@@ -548,6 +625,18 @@ void turnLeftBy(int16_t degrees) {
 
 void turnRightTo(int16_t targetBearing){
 	
+	char lcdClear[4];
+	lcdClear[0] = '~';
+	lcdClear[1] = 'C';
+	lcdClear[2] = '\n';
+	
+	char lcdHome[5];
+	lcdHome[0] = '~';
+	lcdHome[1] = 'G';
+	lcdHome[2] = 0x00;
+	lcdHome[2] = 0x00;
+	lcdHome[3] = '\n';
+	
 	char buffer[14];
 	char heading[4];
 	char target[4];
@@ -571,14 +660,17 @@ void turnRightTo(int16_t targetBearing){
 	uart_puts(buffer);
 	TX_NEWLINE;
 	
-	buffer[10] = '\n';
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
+	_delay_ms(100);
+	buffer[10] = '\n';	
 	send_string_SPI(buffer);
 	
 	int16_t degreesToTurn = 0;
 	if(headingVal <= targetBearing)
 	{
 		degreesToTurn = targetBearing - headingVal;
-	} else {
+		} else {
 		degreesToTurn = (360-headingVal)+targetBearing;
 	}
 	
@@ -597,21 +689,24 @@ void turnRightTo(int16_t targetBearing){
 		uart_puts(buffer);
 		TX_NEWLINE;
 		
-		buffer[10] = '\n';
+		send_string_SPI(lcdClear);
+		send_string_SPI(lcdHome);
+		_delay_ms(100);
+		buffer[10] = '\n';		
 		send_string_SPI(buffer);
 		
-		turnRight();		
-	
+		turnRight();
+		
 		if(headingVal <= targetBearing)
 		{
 			degreesToTurn = targetBearing - headingVal;
-		} else {
+			} else {
 			degreesToTurn = (360-headingVal)+targetBearing;
 		}
 		
 		if(abs(degreesToTurn) <=  BEARING_TOLERANCE)
 		{
-			degreesToTurn = 0;			
+			degreesToTurn = 0;
 		}
 		_delay_ms(250);
 	}
@@ -623,6 +718,18 @@ void turnRightTo(int16_t targetBearing){
 }
 
 void turnLeftTo(int16_t targetBearing){
+	
+	char lcdClear[4];
+	lcdClear[0] = '~';
+	lcdClear[1] = 'C';
+	lcdClear[2] = '\n';
+	
+	char lcdHome[5];
+	lcdHome[0] = '~';
+	lcdHome[1] = 'G';
+	lcdHome[2] = 0x00;
+	lcdHome[2] = 0x00;
+	lcdHome[3] = '\n';
 	
 	char buffer[14];
 	char heading[4];
@@ -648,6 +755,9 @@ void turnLeftTo(int16_t targetBearing){
 	
 	uart_puts(buffer);
 	TX_NEWLINE;
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
+	_delay_ms(100);
 	send_string_SPI(buffer);
 	
 	int degreesToTurn = 0;
@@ -662,7 +772,7 @@ void turnLeftTo(int16_t targetBearing){
 	while(degreesToTurn > 0) {
 		
 		headingVal = getHeadingInt();
-				
+		
 		dec_to_str(target,targetBearing, 3);
 		strncpy(buffer, target, 3);
 		strncpy(buffer+3, " <- ", 4);
@@ -671,17 +781,20 @@ void turnLeftTo(int16_t targetBearing){
 		strncpy(buffer+7, heading, 3);
 		
 		uart_puts(buffer);
-		TX_NEWLINE;
+		TX_NEWLINE;		
 		
+		send_string_SPI(lcdClear);
+		send_string_SPI(lcdHome);
+		_delay_ms(100);
 		buffer[10] = '\n';
-		send_string_SPI(buffer);	
+		send_string_SPI(buffer);
 		
 		turnLeft();
-				
+		
 		if(headingVal >= targetBearing)
 		{
 			degreesToTurn = headingVal - targetBearing;
-		} else {
+			} else {
 			degreesToTurn = 360 - (targetBearing - headingVal);
 		}
 		
@@ -706,7 +819,7 @@ void turnTo(int16_t targetBearing){
 int16_t getPulseComparitorForDistance(int distanceInDecimeters){
 	
 	int16_t revsPerCentimetre = (int16_t)(SINGLE_REVOLUTION_FWD / MEASURED_DISTANCE_PER_REVOLUTION);
-	return revsPerCentimetre * (distanceInDecimeters * 10);	
+	return revsPerCentimetre * (distanceInDecimeters * 10);
 }
 
 ISR (INT0_vect)
