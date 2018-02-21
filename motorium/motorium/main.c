@@ -85,8 +85,8 @@ int main(void)
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
 	lcdHome[2] = 0x00;
-	lcdHome[2] = 0x00;
-	lcdHome[3] = '\n';
+	lcdHome[3] = 0x00;
+	lcdHome[4] = '\n';
 	
 	int16_t mxraw = 0;
 	int16_t myraw = 0;
@@ -467,8 +467,8 @@ void allStop(void) {
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
 	lcdHome[2] = 0x00;
-	lcdHome[2] = 0x00;
-	lcdHome[3] = '\n';
+	lcdHome[3] = 0x00;
+	lcdHome[4] = '\n';
 	
 	LED_PORT &= ~PORT_LED_MASK;
 	LED_PORT &= ~STARBOARD_LED_MASK;
@@ -496,8 +496,8 @@ void forward() {
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
 	lcdHome[2] = 0x00;
-	lcdHome[2] = 0x00;
-	lcdHome[3] = '\n';
+	lcdHome[3] = 0x00;
+	lcdHome[4] = '\n';
 	
 	LED_PORT  |= PORT_LED_MASK | STARBOARD_LED_MASK;
 	
@@ -527,8 +527,8 @@ void reverse(void){
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
 	lcdHome[2] = 0x00;
-	lcdHome[2] = 0x00;
-	lcdHome[3] = '\n';
+	lcdHome[3] = 0x00;
+	lcdHome[4] = '\n';
 	//drive backward (both wheels)
 	// aim is OCR1 to be between 1.0 and 1.5ms for backward.
 	// stopped OCR1 above is 3ms (3000) (half this for fast pwm versus corrected pwm??
@@ -634,8 +634,15 @@ void turnRightTo(int16_t targetBearing){
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
 	lcdHome[2] = 0x00;
-	lcdHome[2] = 0x00;
-	lcdHome[3] = '\n';
+	lcdHome[3] = 0x00;
+	lcdHome[4] = '\n';
+	
+	char lcdPosition[5];
+	lcdPosition[0] = '~';
+	lcdPosition[1] = 'G';
+	lcdPosition[2] = 0x00;
+	lcdPosition[3] = 0x01;
+	lcdPosition[4] = '\n';
 	
 	char buffer[14];
 	char heading[4];
@@ -649,22 +656,22 @@ void turnRightTo(int16_t targetBearing){
 	int16_t sample3 = getHeadingInt();
 	int16_t headingVal = (sample1 + sample2 + sample3)/3;
 	
-	dec_to_str(heading,headingVal, 3);
-	strncpy(buffer, heading, 3);
+	//dec_to_str(heading,headingVal, 3);
+	//strncpy(buffer, heading, 3);
 	
-	strncpy(buffer+3, " -> ", 4);
+	//strncpy(buffer+3, " -> ", 4);
 	
-	dec_to_str(target,targetBearing, 3);
-	strncpy(buffer+7, target, 3);
+	//dec_to_str(target,targetBearing, 3);
+	//strncpy(buffer+7, target, 3);
 	
-	uart_puts(buffer);
+	uart_puts("Turning right ...");
 	TX_NEWLINE;
 	
 	send_string_SPI(lcdClear);
 	send_string_SPI(lcdHome);
 	_delay_ms(100);
-	buffer[10] = '\n';	
-	send_string_SPI(buffer);
+	//buffer[10] = '\n';	
+	send_string_SPI("Turning right ...\n");
 	
 	int16_t degreesToTurn = 0;
 	if(headingVal <= targetBearing)
@@ -689,8 +696,7 @@ void turnRightTo(int16_t targetBearing){
 		uart_puts(buffer);
 		TX_NEWLINE;
 		
-		send_string_SPI(lcdClear);
-		send_string_SPI(lcdHome);
+		send_string_SPI(lcdPosition);
 		_delay_ms(100);
 		buffer[10] = '\n';		
 		send_string_SPI(buffer);
@@ -728,8 +734,15 @@ void turnLeftTo(int16_t targetBearing){
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
 	lcdHome[2] = 0x00;
-	lcdHome[2] = 0x00;
-	lcdHome[3] = '\n';
+	lcdHome[3] = 0x00;
+	lcdHome[4] = '\n';
+	
+	char lcdPosition[5];
+	lcdPosition[0] = '~';
+	lcdPosition[1] = 'G';
+	lcdPosition[2] = 0x00;
+	lcdPosition[3] = 0x01;
+	lcdPosition[4] = '\n';
 	
 	char buffer[14];
 	char heading[4];
@@ -748,17 +761,17 @@ void turnLeftTo(int16_t targetBearing){
 	int16_t sample3 = getHeadingInt();
 	int16_t headingVal = (sample1 + sample2 + sample3)/3;
 	
-	dec_to_str(heading,headingVal, 3);
-	strncpy(buffer+7, heading, 3);
+	//dec_to_str(heading,headingVal, 3);
+	//strncpy(buffer+7, heading, 3);
 	
-	buffer[10] = '\n';
+	//buffer[10] = '\n';
 	
-	uart_puts(buffer);
+	uart_puts("Turning left ...");
 	TX_NEWLINE;
 	send_string_SPI(lcdClear);
 	send_string_SPI(lcdHome);
 	_delay_ms(100);
-	send_string_SPI(buffer);
+	send_string_SPI("Turning left ...\n");
 	
 	int degreesToTurn = 0;
 	
@@ -783,8 +796,7 @@ void turnLeftTo(int16_t targetBearing){
 		uart_puts(buffer);
 		TX_NEWLINE;		
 		
-		send_string_SPI(lcdClear);
-		send_string_SPI(lcdHome);
+		send_string_SPI(lcdPosition);
 		_delay_ms(100);
 		buffer[10] = '\n';
 		send_string_SPI(buffer);
