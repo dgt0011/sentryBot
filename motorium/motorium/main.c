@@ -42,6 +42,8 @@
 #define BAUD 9600
 #define MYUBRR (FOSC/16/BAUD -1)
 
+#define LCD_POS_BASE		0x60
+
 int16_t getHeadingInt(void);
 int16_t getPulseComparitorForDistance(int distanceInDecimeters);
 void startUpIndicator(void);
@@ -84,8 +86,8 @@ int main(void)
 	char lcdHome[5];
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
-	lcdHome[2] = 0x00;
-	lcdHome[3] = 0x00;
+	lcdHome[2] = LCD_POS_BASE + 0;
+	lcdHome[3] = LCD_POS_BASE + 0;
 	lcdHome[4] = '\n';
 	
 	int16_t mxraw = 0;
@@ -109,8 +111,10 @@ int main(void)
 	
 	uart_puts("Comms online.");
 	TX_NEWLINE;
-		send_string_SPI(lcdClear);
-		send_string_SPI(lcdHome);
+	send_string_SPI(lcdClear);
+	send_string_SPI(lcdHome);
+	_delay_ms(100);
+	
 	send_string_SPI("Comms online.\n");
 	_delay_ms(1000);
 	send_string_SPI(lcdClear);
@@ -164,10 +168,11 @@ int main(void)
 	char lcdPosition[5];
 	lcdPosition[0] = '~';
 	lcdPosition[1] = 'G';
-	lcdPosition[2] = 0x03;
-	lcdPosition[3] = 0x01;
+	lcdPosition[2] = LCD_POS_BASE + 3;
+	lcdPosition[3] = LCD_POS_BASE + 1;
 	lcdPosition[4] = '\n';
 	send_string_SPI(lcdPosition);	
+	
 	send_string_SPI("System ready.\n");
 	_delay_ms(2000);
 	
@@ -199,6 +204,7 @@ int main(void)
 		dtostrf(heading, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
 		uart_puts("\r\n");
 		
+		send_string_SPI(lcdPosition);			
 		int headingInt = (int)heading;
 		char distStr[5];
 		dec_to_str(distStr,headingInt, 3);
@@ -206,7 +212,7 @@ int main(void)
 		send_string_SPI(distStr);
 		_delay_ms(500);
 		send_string_SPI(lcdClear);
-		send_string_SPI(lcdHome);
+		send_string_SPI(lcdHome);			
 		
 		if(pulseCountComparitor > 0)
 		{
@@ -466,8 +472,8 @@ void allStop(void) {
 	char lcdHome[5];
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
-	lcdHome[2] = 0x00;
-	lcdHome[3] = 0x00;
+	lcdHome[2] = LCD_POS_BASE +  0;
+	lcdHome[3] = LCD_POS_BASE  + 0;
 	lcdHome[4] = '\n';
 	
 	LED_PORT &= ~PORT_LED_MASK;
@@ -495,8 +501,8 @@ void forward() {
 	char lcdHome[5];
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
-	lcdHome[2] = 0x00;
-	lcdHome[3] = 0x00;
+	lcdHome[2] = LCD_POS_BASE + 0;
+	lcdHome[3] = LCD_POS_BASE + 0;
 	lcdHome[4] = '\n';
 	
 	LED_PORT  |= PORT_LED_MASK | STARBOARD_LED_MASK;
@@ -526,8 +532,8 @@ void reverse(void){
 	char lcdHome[5];
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
-	lcdHome[2] = 0x00;
-	lcdHome[3] = 0x00;
+	lcdHome[2] = LCD_POS_BASE + 0;
+	lcdHome[3] = LCD_POS_BASE + 0;
 	lcdHome[4] = '\n';
 	//drive backward (both wheels)
 	// aim is OCR1 to be between 1.0 and 1.5ms for backward.
@@ -633,15 +639,15 @@ void turnRightTo(int16_t targetBearing){
 	char lcdHome[5];
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
-	lcdHome[2] = 0x00;
-	lcdHome[3] = 0x00;
+	lcdHome[2] = LCD_POS_BASE + 0;
+	lcdHome[3] = LCD_POS_BASE + 0;
 	lcdHome[4] = '\n';
 	
 	char lcdPosition[5];
 	lcdPosition[0] = '~';
 	lcdPosition[1] = 'G';
-	lcdPosition[2] = 0x00;
-	lcdPosition[3] = 0x01;
+	lcdPosition[2] = LCD_POS_BASE + 0;
+	lcdPosition[3] = LCD_POS_BASE + 1;
 	lcdPosition[4] = '\n';
 	
 	char buffer[14];
@@ -733,15 +739,15 @@ void turnLeftTo(int16_t targetBearing){
 	char lcdHome[5];
 	lcdHome[0] = '~';
 	lcdHome[1] = 'G';
-	lcdHome[2] = 0x00;
-	lcdHome[3] = 0x00;
+	lcdHome[2] = LCD_POS_BASE + 0;
+	lcdHome[3] = LCD_POS_BASE + 0;
 	lcdHome[4] = '\n';
 	
 	char lcdPosition[5];
 	lcdPosition[0] = '~';
 	lcdPosition[1] = 'G';
-	lcdPosition[2] = 0x00;
-	lcdPosition[3] = 0x01;
+	lcdPosition[2] = LCD_POS_BASE + 0;
+	lcdPosition[3] = LCD_POS_BASE + 1;
 	lcdPosition[4] = '\n';
 	
 	char buffer[14];
