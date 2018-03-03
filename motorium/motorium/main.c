@@ -1,9 +1,4 @@
-
 #define F_CPU 16000000UL
-
-#define UART_BAUD_RATE	9600
-
-#define TX_NEWLINE {uart_putc(0x0d); uart_putc(0x0a);}
 
 #include <avr/io.h>
 #include <util/delay.h>
@@ -21,32 +16,37 @@
 #define MAGN_DOCALIBRATION 0 //enable or disable magnetometer calibration
 #define magncal_getrawdata(mxraw, myraw, mzraw) hmc5883l_getrawdata(mxraw, myraw, mzraw); //set the function that return magnetometer raw values
 
-#define LED_PORT	PORTC
-#define LED_DDR		DDRC
+#define OUTPUT_PORT				PORTC
+#define OUTPUT_DDR				DDRC
 
-#define MOTOR_PORT	PORTB
-#define MOTOR_DDR	DDRB
+#define CONTROL_PORT			PORTB
+#define CONTROL_DDR				DDRB
 
-#define PORT_LED_MASK		(1<<PC0)
-#define STARBOARD_LED_MASK	(1<<PC1)
-#define ACTIVE_LED_MASK		(1<<PC2)
+#define PORT_LED_MASK			(1<<PC0)
+#define STARBOARD_LED_MASK		(1<<PC1)
+#define ACTIVE_LED_MASK			(1<<PC2)
+#define DEBUG_PIN_MASK			(1<<PC3)
 
-#define DEBUG_PIN_MASK		(1<<PC3)
+#define CMD_COMPLETE_PIN_MASK	(1<<PB0)
+#define PORT_MOTOR				(1<<PB1)
+#define STARBOARD_MOTOR			(1<<PB2)
 
-#define PORT_MOTOR			(1<<PB1)
-#define STARBOARD_MOTOR		(1<<PB2)
+#define DELAY					1000
 
-#define DELAY		1000
+#define FOSC					16000000                       // Clock Speed
+#define BAUD					9600
+#define MYUBRR					(FOSC/16/BAUD -1)
+#define TX_NEWLINE				{uart_putc(0x0d); uart_putc(0x0a);}
 
-#define FOSC 16000000                       // Clock Speed
-#define BAUD 9600
-#define MYUBRR (FOSC/16/BAUD -1)
-
-#define LCD_POS_BASE		0x60
+#define LCD_POS_BASE			0x60
 
 int16_t getHeadingInt(void);
 int16_t getPulseComparitorForDistance(int distanceInDecimeters);
 void startUpIndicator(void);
+void signalCommandComplete(void);
+void lcdClearAndHome(void);
+void lcdGoTo(uint8_t x, uint8_t y);
+void checkTurnBearing(uint8_t turnDirection);
 
 // SPI communications
 void send_string_SPI(char s[]);
@@ -58,7 +58,7 @@ void uart_init(void);
 void uart_puts(const char *s );
 void uart_putc(unsigned char data);
 
-const int BEARING_TOLERANCE = 5;
+const uint8_t BEARING_TOLERANCE = 5;
 
 const int16_t SINGLE_REVOLUTION_FWD = 4850;
 const int16_t SINGLE_REVOLUTION_REV = 4850;
@@ -71,25 +71,15 @@ volatile char commandBuffer[20];
 volatile int16_t pulseCount;
 volatile int16_t pulseCountComparitor;
 
-volatile uint8_t command;
-volatile uint8_t commandDurationMs;
 volatile uint8_t durationIdx;
-uint8_t _commandTest;
+
+uint8_t		_currentCommand;
+
+int16_t		_targetBearing;
+int16_t		_degrees;	//maybe not needed?
 
 int main(void)
 {
-	char lcdClear[4];
-	lcdClear[0] = '~';
-	lcdClear[1] = 'C';
-	lcdClear[2] = '\n';
-	
-	char lcdHome[5];
-	lcdHome[0] = '~';
-	lcdHome[1] = 'G';
-	lcdHome[2] = LCD_POS_BASE + 0;
-	lcdHome[3] = LCD_POS_BASE + 0;
-	lcdHome[4] = '\n';
-	
 	int16_t mxraw = 0;
 	int16_t myraw = 0;
 	int16_t mzraw = 0;
@@ -101,8 +91,10 @@ int main(void)
 	pulseCountComparitor = 0;
 	pulseCount = 0;
 	
-	LED_DDR |= PORT_LED_MASK | STARBOARD_LED_MASK | ACTIVE_LED_MASK | DEBUG_PIN_MASK;
-	MOTOR_DDR |= PORT_MOTOR |STARBOARD_MOTOR;
+	_currentCommand = 0x00;
+	
+	OUTPUT_DDR |= PORT_LED_MASK | STARBOARD_LED_MASK | ACTIVE_LED_MASK | DEBUG_PIN_MASK;
+	CONTROL_DDR |= PORT_MOTOR |STARBOARD_MOTOR | CMD_COMPLETE_PIN_MASK;
 	
 	startUpIndicator();
 	
@@ -111,32 +103,31 @@ int main(void)
 	
 	uart_puts("Comms online.");
 	TX_NEWLINE;
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
-	_delay_ms(100);
 	
+	lcdClearAndHome();
 	send_string_SPI("Comms online.\n");
 	_delay_ms(1000);
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
+	lcdClearAndHome();
 	
 	uart_puts("Initialising sensors ...");
 	TX_NEWLINE;
-	send_string_SPI("Init sensors ..\n");
+	
+	send_string_SPI("Init sensors...\n");
 	_delay_ms(1000);
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
+	lcdClearAndHome();
 	
 	hmc5883l_init();
 	
 	uart_puts("Initialising drives ..");
 	TX_NEWLINE;
-	send_string_SPI("Init drives ..\n");
-	_delay_ms(1000);
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
 	
-	drive_init();
+	send_string_SPI("Init drives...\n");
+	_delay_ms(1000);
+	lcdClearAndHome();	
+	
+	drive_init();	
+	_delay_ms(1000);	
+	lcdClearAndHome();
 	
 	// h/w interrupts on INT0 and INT1
 	DDRD &= ~(1 << DDD2);		// Clear the PD2 & PD3 pin & enable PD2 & PD3 as input
@@ -165,16 +156,11 @@ int main(void)
 	uart_puts("System ready.");
 	TX_NEWLINE;
 	
-	char lcdPosition[5];
-	lcdPosition[0] = '~';
-	lcdPosition[1] = 'G';
-	lcdPosition[2] = LCD_POS_BASE + 3;
-	lcdPosition[3] = LCD_POS_BASE + 1;
-	lcdPosition[4] = '\n';
-	send_string_SPI(lcdPosition);	
-	
 	send_string_SPI("System ready.\n");
 	_delay_ms(2000);
+	
+	lcdGoTo(0, 1);
+	send_string_SPI("H:\n");
 	
 	while (1)
 	{
@@ -203,19 +189,21 @@ int main(void)
 		dtostrf(mz, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
 		dtostrf(heading, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
 		uart_puts("\r\n");
-		
-		send_string_SPI(lcdPosition);			
+			
 		int headingInt = (int)heading;
 		char distStr[5];
 		dec_to_str(distStr,headingInt, 3);
 		distStr[3] = '\n';
-		send_string_SPI(distStr);
-		_delay_ms(500);
-		send_string_SPI(lcdClear);
-		send_string_SPI(lcdHome);			
 		
+		if(_currentCommand != TURNLEFT && _currentCommand != TURNRIGHT){
+			lcdGoTo(3, 1);
+			send_string_SPI(distStr);			
+		}
+				
+		// if currently moving in forward or reverse - check if the distance has been reached ...
 		if(pulseCountComparitor > 0)
 		{
+			// currently moving in a straight line - forward or reverse
 			if(pulseCount >= pulseCountComparitor){
 				uart_puts("pulseCount >= pulseCountComparitor");
 				TX_NEWLINE;
@@ -225,16 +213,21 @@ int main(void)
 				uart_puts(pulseStr);
 				TX_NEWLINE;
 				
-				TX_NEWLINE;
 				allStop();
+				signalCommandComplete();
 				pulseCountComparitor = 0;
 				pulseCount = 0;
 			}
 		}
 		
-		//if the command buffer is not empty ...
+		//if currently turning - check if the angle has been reached ...
+		if(_currentCommand == TURNLEFT || _currentCommand == TURNRIGHT){			
+			checkTurnBearing(_currentCommand);		
+		}		
+		
+		// finally check if we've received a new command or a HALT!
 		if(commandBuffer[0] != 0){
-			
+			//if the command buffer is not empty ...
 			uart_puts(commandBuffer);
 			TX_NEWLINE;
 			send_string_SPI(commandBuffer);
@@ -252,20 +245,13 @@ int main(void)
 			char** tokens;
 			tokens = str_split(commandBuffer, delim);
 			if(tokens) {
+				
+				OUTPUT_PORT |= ACTIVE_LED_MASK;
+				
 				operation = *(tokens+idx)[0];
 				idx++;
 				val = safeStrtoi(*(tokens+idx),10);
-				
-				uart_puts("Value : ");
-				uart_puts(*(tokens+1));
-				
-				uart_puts(" [ ");
-				char valStr[5];
-				dec_to_str(valStr,val, 3);
-				uart_puts(valStr);
-				uart_puts(" ] ");
-				TX_NEWLINE;
-				
+							
 				//cleanup
 				int i;
 				for(i=0;*(tokens+i);i++){
@@ -285,6 +271,7 @@ int main(void)
 				{
 					handled = 1;
 					if(val == 0){
+						// TODO: THis CURRENTLY limits forward direction to 35 cm
 						pulseCountComparitor = SINGLE_REVOLUTION_FWD;
 						} else {
 						pulseCountComparitor = getPulseComparitorForDistance(val);
@@ -300,14 +287,11 @@ int main(void)
 						pulseCountComparitor = SINGLE_REVOLUTION_REV;
 						} else {
 						pulseCountComparitor = getPulseComparitorForDistance(val);
-					}
-					
-					pulseCountComparitor = SINGLE_REVOLUTION_REV;
+					}		
 					pulseCount = 0;
 					reverse();
 				}
 
-				// TODO: The following are not 'event' enabled!
 				if(operation == TURNRIGHT)
 				{
 					handled = 1;
@@ -320,11 +304,10 @@ int main(void)
 					turnLeftBy(val);
 					pulseCount = 0;
 				}
-				
-				
-				} else {
+			} else {
 				uart_puts("bad command :");
 				uart_puts(commandBuffer);
+				send_string_SPI("bad command\n");
 				TX_NEWLINE;
 			}
 			
@@ -338,36 +321,32 @@ int main(void)
 			
 			commandBuffer[0] = 0;
 			// restart interrupts
-			sei();
-			
-			
-			} else {
-			//uart_putc('^');
-		}
+			sei();			
+		} 
 	}
 }
 
 void startUpIndicator(void) {
 
-	LED_PORT |= ACTIVE_LED_MASK;
+	OUTPUT_PORT |= ACTIVE_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT &= ~ACTIVE_LED_MASK;
+	OUTPUT_PORT &= ~ACTIVE_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT |= ACTIVE_LED_MASK;
+	OUTPUT_PORT |= ACTIVE_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT &= ~ACTIVE_LED_MASK;
+	OUTPUT_PORT &= ~ACTIVE_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT |= ACTIVE_LED_MASK;
+	OUTPUT_PORT |= ACTIVE_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT &= ~ACTIVE_LED_MASK;
+	OUTPUT_PORT &= ~ACTIVE_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT |= ACTIVE_LED_MASK;
+	OUTPUT_PORT |= ACTIVE_LED_MASK;
 	_delay_ms(1000);
 	
-	LED_PORT |= PORT_LED_MASK | STARBOARD_LED_MASK;
+	OUTPUT_PORT |= PORT_LED_MASK | STARBOARD_LED_MASK;
 	_delay_ms(1000);
-	LED_PORT &= ~PORT_LED_MASK;
-	LED_PORT &= ~STARBOARD_LED_MASK;
+	OUTPUT_PORT &= ~PORT_LED_MASK;
+	OUTPUT_PORT &= ~STARBOARD_LED_MASK;
 }
 
 void init_spi_master()
@@ -462,29 +441,17 @@ int16_t getHeadingInt() {
 	return (int16_t)heading;
 }
 
-void allStop(void) {
-	
-	char lcdClear[4];
-	lcdClear[0] = '~';
-	lcdClear[1] = 'C';
-	lcdClear[2] = '\n';
-	
-	char lcdHome[5];
-	lcdHome[0] = '~';
-	lcdHome[1] = 'G';
-	lcdHome[2] = LCD_POS_BASE +  0;
-	lcdHome[3] = LCD_POS_BASE  + 0;
-	lcdHome[4] = '\n';
-	
-	LED_PORT &= ~PORT_LED_MASK;
-	LED_PORT &= ~STARBOARD_LED_MASK;
+void allStop(void) {	
+	OUTPUT_PORT &= ~PORT_LED_MASK;
+	OUTPUT_PORT &= ~STARBOARD_LED_MASK;
 	
 	uart_puts("motors stop");
 	TX_NEWLINE;
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
-	send_string_SPI("motors stop\n");
-	
+	lcdClearAndHome();
+	send_string_SPI("motors stop\n");	
+	_delay_ms(100);
+	lcdGoTo(0, 1);
+	send_string_SPI("H:\n");
 	
 	OCR1AH=0x0B;
 	OCR1AL=0xB8;
@@ -492,26 +459,16 @@ void allStop(void) {
 	OCR1BL=0xB8;
 }
 
-void forward() {
-	char lcdClear[4];
-	lcdClear[0] = '~';
-	lcdClear[1] = 'C';
-	lcdClear[2] = '\n';
-	
-	char lcdHome[5];
-	lcdHome[0] = '~';
-	lcdHome[1] = 'G';
-	lcdHome[2] = LCD_POS_BASE + 0;
-	lcdHome[3] = LCD_POS_BASE + 0;
-	lcdHome[4] = '\n';
-	
-	LED_PORT  |= PORT_LED_MASK | STARBOARD_LED_MASK;
+void forward() {	
+	OUTPUT_PORT  |= PORT_LED_MASK | STARBOARD_LED_MASK;
 	
 	uart_puts("motors forward");
 	TX_NEWLINE;
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
+	lcdClearAndHome();
 	send_string_SPI("motors forward\n");
+	_delay_ms(100);
+	lcdGoTo(0, 1);
+	send_string_SPI("H:\n");
 	
 	//drive forward (both wheels)
 	// aim is OCR1 to be between 1.5 and 2.0ms for forward.
@@ -524,17 +481,6 @@ void forward() {
 }
 
 void reverse(void){
-	char lcdClear[4];
-	lcdClear[0] = '~';
-	lcdClear[1] = 'C';
-	lcdClear[2] = '\n';
-	
-	char lcdHome[5];
-	lcdHome[0] = '~';
-	lcdHome[1] = 'G';
-	lcdHome[2] = LCD_POS_BASE + 0;
-	lcdHome[3] = LCD_POS_BASE + 0;
-	lcdHome[4] = '\n';
 	//drive backward (both wheels)
 	// aim is OCR1 to be between 1.0 and 1.5ms for backward.
 	// stopped OCR1 above is 3ms (3000) (half this for fast pwm versus corrected pwm??
@@ -542,9 +488,11 @@ void reverse(void){
 	
 	uart_puts("motors reverse");
 	TX_NEWLINE;
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
+	lcdClearAndHome();
 	send_string_SPI("motors reverse\n");
+	_delay_ms(100);
+	lcdGoTo(0, 1);
+	send_string_SPI("H:\n");
 	
 	OCR1AH=0x0E;
 	OCR1AL=0x10;
@@ -553,7 +501,7 @@ void reverse(void){
 }
 
 void turnLeft(void){
-	LED_PORT |= STARBOARD_LED_MASK;
+	OUTPUT_PORT |= STARBOARD_LED_MASK;
 	OCR1AH=0x0E;
 	OCR1AL=0x10;
 	OCR1BH=0x09;
@@ -561,7 +509,7 @@ void turnLeft(void){
 }
 
 void turnRight(void){
-	LED_PORT  |= PORT_LED_MASK;
+	OUTPUT_PORT  |= PORT_LED_MASK;
 	OCR1AH=0x09;
 	OCR1AL=0x60;
 	OCR1BH=0x0E;
@@ -629,55 +577,95 @@ void turnLeftBy(int16_t degrees) {
 	TX_NEWLINE;
 }
 
-void turnRightTo(int16_t targetBearing){
+void checkTurnBearing(uint8_t turnDirection){
 	
-	char lcdClear[4];
-	lcdClear[0] = '~';
-	lcdClear[1] = 'C';
-	lcdClear[2] = '\n';
+	char buffer[12];	char heading[4];		char target[4];
 	
-	char lcdHome[5];
-	lcdHome[0] = '~';
-	lcdHome[1] = 'G';
-	lcdHome[2] = LCD_POS_BASE + 0;
-	lcdHome[3] = LCD_POS_BASE + 0;
-	lcdHome[4] = '\n';
+	int16_t	degreesToTurn = 0;
+		
+	int16_t sample1 = getHeadingInt();
+	int16_t sample2 = getHeadingInt();
+	int16_t sample3 = getHeadingInt();
+		
+	int16_t headingVal = (sample1 + sample2 + sample3)/3;
+		
+	if(turnDirection == TURNRIGHT){
+		if(headingVal <= _targetBearing)
+		{
+			degreesToTurn = _targetBearing - headingVal;
+			} else {
+			degreesToTurn = (360-headingVal)+_targetBearing;
+		}	
+	} else {
+		//turn is left
+		if(headingVal >= _targetBearing)
+		{
+			degreesToTurn = headingVal - _targetBearing;
+			} else {
+			degreesToTurn = 360 - (_targetBearing - headingVal);
+		}
+	}
 	
-	char lcdPosition[5];
-	lcdPosition[0] = '~';
-	lcdPosition[1] = 'G';
-	lcdPosition[2] = LCD_POS_BASE + 0;
-	lcdPosition[3] = LCD_POS_BASE + 1;
-	lcdPosition[4] = '\n';
+	dec_to_str(target,_targetBearing, 3);
+	dec_to_str(heading,headingVal, 3);	
+	if(turnDirection == TURNRIGHT){
+		strncpy(buffer, heading, 3);
+		strncpy(buffer+3, " -> ", 4);
+		strncpy(buffer+7, target, 3);
+		buffer[11] = '\n';		
+	} else {
+		strncpy(buffer, target, 3);
+		strncpy(buffer+3, " <- ", 4);
+		strncpy(buffer+7, heading, 3);
+		buffer[11] = '\n';		
+	}			
 	
-	char buffer[14];
-	char heading[4];
-	char target[4];
+	if(abs(degreesToTurn) <=  BEARING_TOLERANCE)
+	{
+		// STOP the turn
+		allStop();
+		_currentCommand = STOP;
+		signalCommandComplete();
+		buffer[0] = ' ';
+		buffer[1] = ' ';
+		buffer[2] = ' ';
+		buffer[3] = ' ';
+		buffer[4] = ' ';
+		buffer[5] = ' ';
+		buffer[6] = ' ';
+		buffer[7] = ' ';
+		buffer[8] = ' ';
+		buffer[9] = ' ';
+		buffer[10] = ' ';
+		buffer[11] = '\n';		
+	}
 	
+	lcdGoTo(7, 2);
+	send_string_SPI(buffer);
+	_delay_ms(100);		
+}
+
+void turnRightTo(int16_t targetBearing){	
+		
 	uart_puts("	-> turnRightTo");
 	TX_NEWLINE;
+	
+	_targetBearing = targetBearing;
 	
 	int16_t sample1 = getHeadingInt();
 	int16_t sample2 = getHeadingInt();
 	int16_t sample3 = getHeadingInt();
 	int16_t headingVal = (sample1 + sample2 + sample3)/3;
 	
-	//dec_to_str(heading,headingVal, 3);
-	//strncpy(buffer, heading, 3);
-	
-	//strncpy(buffer+3, " -> ", 4);
-	
-	//dec_to_str(target,targetBearing, 3);
-	//strncpy(buffer+7, target, 3);
-	
 	uart_puts("Turning right ...");
-	TX_NEWLINE;
-	
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
+	TX_NEWLINE;	
+	lcdClearAndHome();
 	_delay_ms(100);
-	//buffer[10] = '\n';	
 	send_string_SPI("Turning right ...\n");
+	_delay_ms(100);
+	lcdGoTo(0, 1);
+	send_string_SPI("H:\n");
+	_delay_ms(500);
 	
 	int16_t degreesToTurn = 0;
 	if(headingVal <= targetBearing)
@@ -687,100 +675,40 @@ void turnRightTo(int16_t targetBearing){
 		degreesToTurn = (360-headingVal)+targetBearing;
 	}
 	
-	while(degreesToTurn > 0) {
+	if(abs(degreesToTurn) >= BEARING_TOLERANCE){
+		_currentCommand = TURNRIGHT;
+		_degrees = degreesToTurn;
 		
-		headingVal = getHeadingInt();
-		
-		dec_to_str(heading,headingVal, 3);
-		strncpy(buffer, heading, 3);
-		
-		strncpy(buffer+3, " -> ", 4);
-		
-		dec_to_str(target,targetBearing, 3);
-		strncpy(buffer+7, target, 3);
-		
-		uart_puts(buffer);
-		TX_NEWLINE;
-		
-		send_string_SPI(lcdPosition);
-		_delay_ms(100);
-		buffer[10] = '\n';		
-		send_string_SPI(buffer);
-		
+		//start the turn
 		turnRight();
-		
-		if(headingVal <= targetBearing)
-		{
-			degreesToTurn = targetBearing - headingVal;
-			} else {
-			degreesToTurn = (360-headingVal)+targetBearing;
-		}
-		
-		if(abs(degreesToTurn) <=  BEARING_TOLERANCE)
-		{
-			degreesToTurn = 0;
-		}
-		_delay_ms(250);
 	}
-	
+		
 	uart_puts("	<- turnRightTo");
 	TX_NEWLINE;
-	
-	allStop();
 }
 
-void turnLeftTo(int16_t targetBearing){
-	
-	char lcdClear[4];
-	lcdClear[0] = '~';
-	lcdClear[1] = 'C';
-	lcdClear[2] = '\n';
-	
-	char lcdHome[5];
-	lcdHome[0] = '~';
-	lcdHome[1] = 'G';
-	lcdHome[2] = LCD_POS_BASE + 0;
-	lcdHome[3] = LCD_POS_BASE + 0;
-	lcdHome[4] = '\n';
-	
-	char lcdPosition[5];
-	lcdPosition[0] = '~';
-	lcdPosition[1] = 'G';
-	lcdPosition[2] = LCD_POS_BASE + 0;
-	lcdPosition[3] = LCD_POS_BASE + 1;
-	lcdPosition[4] = '\n';
-	
-	char buffer[14];
-	char heading[4];
-	char target[4];
-	
+void turnLeftTo(int16_t targetBearing){	
+		
 	uart_puts("	-> turnLeftTo");
 	TX_NEWLINE;
-
-	dec_to_str(target,targetBearing, 3);
 	
-	strncpy(buffer, target, 3);
-	strncpy(buffer+3, " <- ", 4);
-
+	_targetBearing = targetBearing;
+	
 	int16_t sample1 = getHeadingInt();
 	int16_t sample2 = getHeadingInt();
 	int16_t sample3 = getHeadingInt();
 	int16_t headingVal = (sample1 + sample2 + sample3)/3;
 	
-	//dec_to_str(heading,headingVal, 3);
-	//strncpy(buffer+7, heading, 3);
-	
-	//buffer[10] = '\n';
-	
 	uart_puts("Turning left ...");
 	TX_NEWLINE;
-	send_string_SPI(lcdClear);
-	send_string_SPI(lcdHome);
-	_delay_ms(100);
+	lcdClearAndHome();
 	send_string_SPI("Turning left ...\n");
+	_delay_ms(100);
+	lcdGoTo(0, 1);
+	send_string_SPI("H:\n");
+	_delay_ms(500);
 	
-	int degreesToTurn = 0;
-	
+	int16_t degreesToTurn = 0;	
 	if(headingVal >= targetBearing)
 	{
 		degreesToTurn = headingVal - targetBearing;
@@ -788,54 +716,23 @@ void turnLeftTo(int16_t targetBearing){
 		degreesToTurn = 360 - (targetBearing - headingVal);
 	}
 	
-	while(degreesToTurn > 0) {
-		
-		headingVal = getHeadingInt();
-		
-		dec_to_str(target,targetBearing, 3);
-		strncpy(buffer, target, 3);
-		strncpy(buffer+3, " <- ", 4);
-		
-		dec_to_str(heading,headingVal, 3);
-		strncpy(buffer+7, heading, 3);
-		
-		uart_puts(buffer);
-		TX_NEWLINE;		
-		
-		send_string_SPI(lcdPosition);
-		_delay_ms(100);
-		buffer[10] = '\n';
-		send_string_SPI(buffer);
-		
+	if(abs(degreesToTurn) >= BEARING_TOLERANCE){
+		_currentCommand = TURNLEFT;
+		_degrees = degreesToTurn;
+			
+		//start the turn
 		turnLeft();
-		
-		if(headingVal >= targetBearing)
-		{
-			degreesToTurn = headingVal - targetBearing;
-			} else {
-			degreesToTurn = 360 - (targetBearing - headingVal);
-		}
-		
-		if(abs(degreesToTurn) <=  BEARING_TOLERANCE)
-		{
-			degreesToTurn = 0;
-		}
-		
-		_delay_ms(250);
 	}
 	
 	uart_puts("	<- turnLeftTo");
 	TX_NEWLINE;
-	
-	allStop();
 }
 
 void turnTo(int16_t targetBearing){
 	
 }
 
-int16_t getPulseComparitorForDistance(int distanceInDecimeters){
-	
+int16_t getPulseComparitorForDistance(int distanceInDecimeters){	
 	int16_t revsPerCentimetre = (int16_t)(SINGLE_REVOLUTION_FWD / MEASURED_DISTANCE_PER_REVOLUTION);
 	return revsPerCentimetre * (distanceInDecimeters * 10);
 }
@@ -889,6 +786,46 @@ ISR (USART_RX_vect)
 	}
 	
 	//UDR0 = ReceivedChar;                       // Write the data to the TX buffer
+}
+
+void signalCommandComplete(void){	
+	CONTROL_PORT |= CMD_COMPLETE_PIN_MASK;
+	_delay_ms(100);
+	CONTROL_PORT &= ~CMD_COMPLETE_PIN_MASK;
+	
+	OUTPUT_PORT &= ~ACTIVE_LED_MASK;
+	
+}
+
+void lcdClearAndHome() {
+		char lcdClear[4];
+		lcdClear[0] = '~';
+		lcdClear[1] = 'C';
+		lcdClear[2] = '\n';
+		
+		char lcdHome[5];
+		lcdHome[0] = '~';
+		lcdHome[1] = 'G';
+		lcdHome[2] = LCD_POS_BASE + 0;
+		lcdHome[3] = LCD_POS_BASE + 0;
+		lcdHome[4] = '\n';
+		
+		send_string_SPI(lcdClear);
+		_delay_ms(100);
+		send_string_SPI(lcdHome);
+		_delay_ms(100);
+}
+
+void lcdGoTo(uint8_t x, uint8_t y) {
+		char lcdPosition[5];
+		lcdPosition[0] = '~';
+		lcdPosition[1] = 'G';
+		lcdPosition[2] = LCD_POS_BASE + x;
+		lcdPosition[3] = LCD_POS_BASE + y;
+		lcdPosition[4] = '\n';
+		
+		send_string_SPI(lcdPosition);
+		_delay_ms(100);
 }
 
 
