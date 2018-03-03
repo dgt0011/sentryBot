@@ -31,6 +31,9 @@ void uart_putc(unsigned char data);
 int uartBufferIdx;
 char uartBuffer[20];
 
+volatile uint8_t commandFlag;
+volatile uint8_t commandIdx;
+
 int main(void)
 {	
 	LED_DDR |= ACTIVE_LED_MASK | DEBUG_PIN_MASK;
@@ -46,139 +49,87 @@ int main(void)
 	LED_PORT |= ACTIVE_LED_MASK;
 	_delay_ms(1000);
 	
+	// h/w interrupts on INT0 and INT1
+	DDRD &= ~(1 << DDD2);		// Clear the PD2 & PD3 pin & enable PD2 & PD3 as input
+	DDRD &= ~(1 << DDD3);
+	PORTD |= (1 << PORTD2) | (1 << PORTD3);
+
+	//trigger INT0, INT1 on rising edge
+	EICRA |= (1 << ISC11) | (1<< ISC01);
+	EIMSK |= (1 << INT0) | (1 << INT1);
+	
+	commandFlag = 0;
+	commandIdx = 0;	
+	
 	sei(); 
 	
-	LED_PORT |= DEBUG_PIN_MASK;
+	LED_PORT |= DEBUG_PIN_MASK;	
+	
+	//start the first command straight away
 	
 	uartBuffer[0] = FORWARD;
 	uartBuffer[1] = ':';
 	uartBuffer[2] = '0';
 	uartBuffer[3] = '0';	
 	uartBuffer[4] = '\n';
-	//uart_puts("forward:10\n");	
 	uart_puts(uartBuffer);
-	_delay_ms(5500);
 	
-	uartBuffer[0] = STOP;
-	uartBuffer[1] = ':';
-	uartBuffer[2] = '0';
-	uartBuffer[3] = '0';	
-	uartBuffer[4] = '\n';
-	uart_puts(uartBuffer);
-	_delay_ms(2000);	
-	//uart_puts("stop:0\n");
-		
-	uartBuffer[0] = TURNRIGHT;
-	uartBuffer[1] = ':';
-	uartBuffer[2] = '4';
-	uartBuffer[3] = '5';
-	uartBuffer[4] = '\n';
-	uart_puts(uartBuffer);
-	//uart_puts("forward:10\n");
-	_delay_ms(5500);
-	
-	uartBuffer[0] = STOP;
-	uartBuffer[1] = ':';
-	uartBuffer[2] = '0';
-	uartBuffer[3] = '0';
-	uartBuffer[4] = '\n';
-	uart_puts(uartBuffer);
-	_delay_ms(2000);
-	
-	uartBuffer[0] = TURNLEFT;
-	uartBuffer[1] = ':';
-	uartBuffer[2] = '4';
-	uartBuffer[3] = '5';
-	uartBuffer[4] = '\n';
-	uart_puts(uartBuffer);
-	//uart_puts("forward:10\n");
-	_delay_ms(5500);
-		
-	uartBuffer[0] = REVERSE;
-	uartBuffer[1] = ':';
-	uartBuffer[2] = '0';
-	uartBuffer[3] = '0';
-	uartBuffer[4] = '\n';
-	uart_puts(uartBuffer);
-	_delay_ms(5500);
-		
-	uartBuffer[0] = STOP;
-	uartBuffer[1] = ':';
-	uartBuffer[2] = '0';
-	uartBuffer[3] = '0';
-	uartBuffer[4] = '\n';
-	uart_puts(uartBuffer);
-	_delay_ms(2000);
-	//uart_puts("stop:0\n");
-	
-		uartBuffer[0] = TURNRIGHT;
-		uartBuffer[1] = ':';
-		uartBuffer[2] = '1';
-		uartBuffer[3] = '8';
-		uartBuffer[4] = '0';
-		uartBuffer[5] = '\n';
-		uart_puts(uartBuffer);
-	
-		//uartBuffer[0] = FORWARD;
-		//uartBuffer[1] = ':';
-		//uartBuffer[2] = '1';
-		//uartBuffer[3] = '0';
-		//uartBuffer[4] = '\n';
-		//uart_puts(uartBuffer);
-		//_delay_ms(17000);
-		//
-		//uartBuffer[0] = STOP;
-		//uartBuffer[1] = ':';
-		//uartBuffer[2] = '0';
-		//uartBuffer[3] = '0';
-		//uartBuffer[4] = '\n';
-		//uart_puts(uartBuffer);
-		//_delay_ms(2000);
-		//
-		//uartBuffer[0] = TURNLEFT;
-		//uartBuffer[1] = ':';
-		//uartBuffer[2] = '9';
-		//uartBuffer[3] = '0';
-		//uartBuffer[4] = '\n';
-		//uart_puts(uartBuffer);
-		//_delay_ms(3000);
-			//
-		//uartBuffer[0] = TURNLEFT;
-		//uartBuffer[1] = ':';
-		//uartBuffer[2] = '9';
-		//uartBuffer[3] = '0';
-		//uartBuffer[4] = '\n';
-		//uart_puts(uartBuffer);
-		//_delay_ms(3000);
-		//
-		//uartBuffer[0] = FORWARD;
-		//uartBuffer[1] = ':';
-		//uartBuffer[2] = '1';
-		//uartBuffer[3] = '0';
-		//uartBuffer[4] = '\n';
-		//uart_puts(uartBuffer);
-		//_delay_ms(17000);
-				//
-		//uartBuffer[0] = STOP;
-		//uartBuffer[1] = ':';
-		//uartBuffer[2] = '0';
-		//uartBuffer[3] = '0';
-		//uartBuffer[4] = '\n';
-		//uart_puts(uartBuffer);
-		//_delay_ms(2000);
-		//
-				//uartBuffer[0] = TURNRIGHT;
-				//uartBuffer[1] = ':';
-				//uartBuffer[2] = '1';
-				//uartBuffer[3] = '8';
-				//uartBuffer[4] = '0';
-				//uartBuffer[5] = '\n';
-				//uart_puts(uartBuffer);
-				//_delay_ms(6000);
-	
-    /* Replace with your application code */
     while (1) 
     {
+		if(commandFlag == 1){
+			// time to send new command to motorium
+			commandFlag = 0; //reset first
+			if(commandIdx == 1){
+				uartBuffer[0] = TURNRIGHT;
+				uartBuffer[1] = ':';
+				uartBuffer[2] = '4';
+				uartBuffer[3] = '5';
+				uartBuffer[4] = '\n';
+				uart_puts(uartBuffer);
+			}
+			
+			if(commandIdx == 2){
+				uartBuffer[0] = TURNLEFT;
+				uartBuffer[1] = ':';
+				uartBuffer[2] = '4';
+				uartBuffer[3] = '5';
+				uartBuffer[4] = '\n';
+				uart_puts(uartBuffer);
+			}
+			
+			if(commandIdx == 3){
+				uartBuffer[0] = REVERSE;
+				uartBuffer[1] = ':';
+				uartBuffer[2] = '0';
+				uartBuffer[3] = '0';
+				uartBuffer[4] = '\n';
+				uart_puts(uartBuffer);
+			}
+			
+			if(commandIdx == 4){
+				uartBuffer[0] = TURNRIGHT;
+				uartBuffer[1] = ':';
+				uartBuffer[2] = '9';
+				uartBuffer[3] = '0';
+				uartBuffer[4] = '\n';
+			}
+			
+			if(commandIdx == 5){
+				uartBuffer[0] = TURNLEFT;
+				uartBuffer[1] = ':';
+				uartBuffer[2] = '9';
+				uartBuffer[3] = '0';
+				uartBuffer[4] = '\n';
+			}
+			
+			if(commandIdx == 6){
+				uartBuffer[0] = FORWARD;
+				uartBuffer[1] = ':';
+				uartBuffer[2] = '1';
+				uartBuffer[3] = '0';
+				uartBuffer[4] = '\n';
+			}
+		}
     }
 }
 
@@ -215,5 +166,38 @@ ISR (USART_RX_vect)
 	receivedChar = UDR0;                       // Read data from the RX buffer
 	
 	//UDR0 = receivedChar;                       // Write the data to the TX buffer
+}
+
+ISR (INT0_vect)
+{
+	if( (PIND & (1<<PIND2)) == 0)    //is the pin set
+	{
+		_delay_ms(50);
+		if( (PIND & (1<<PIND2)) == 0) // is the pin still set
+		{
+			commandFlag = 1;
+			commandIdx = commandIdx+1;			
+		}
+		else
+		{
+			// do nothing because the input is invalid
+		}
+	}
+}
+
+ISR (INT1_vect)
+{
+	if( (PIND & (1<<PIND3)) == 0)    //is the pin set
+	{
+		_delay_ms(50);
+		if( (PIND & (1<<PIND3)) == 0) // is the pin still set
+		{
+
+		}
+		else
+		{
+			// do nothing because the input is invalid
+		}
+	}
 }
 
