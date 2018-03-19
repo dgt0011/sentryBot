@@ -137,6 +137,9 @@
     <Compile Include="main.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="main.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="MotorControl.h">
       <SubType>compile</SubType>
     </Compile>
